@@ -2,6 +2,9 @@
 <html lang="pt-BR">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-t6264lZ+tU5NV0XBc0rLYfQNk2V5B+TChNvAXaqhogE='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#FFFBF2">
 <title>Snackly</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -431,7 +434,34 @@ function seed(){
     wallet:{saldo:32,limite:25,bloq:['refri','chocolate'],tent:[],rec:[{t:+rec,v:50}],pedido:null},
     wrafa:{saldo:19,rec:[{t:+recR,v:30}]}};
 }
-function load(){try{var s=JSON.parse(localStorage.getItem(LS));if(s&&s.v===2&&s.day===dayKey(Date.now()))return s;}catch(e){}return seed();}
+/* o que vem do armazenamento do navegador pode ter sido mexido: só aceita no formato esperado, senão recomeça do zero */
+var RX_ID=/^[\w-]{1,40}$/,STS=['novo','prep','pronto','entregue'],PAYS=['pix','saldo'],CATK=CATS.slice(1).map(function(c){return c[0];});
+function isNum(v,lo,hi){return typeof v==='number'&&isFinite(v)&&v>=lo&&v<=hi;}
+function isInt(v,lo,hi){return isNum(v,lo,hi)&&Math.floor(v)===v;}
+function isStr(v,max){return typeof v==='string'&&v.length<=max;}
+function isArr(v,max){return Array.isArray(v)&&v.length<=max;}
+var T0=0,T1=4102444800000;
+function okItem(i){return i&&RX_ID.test(i.id)&&isStr(i.n,60)&&isNum(i.p,0,999)&&isInt(i.q,1,99);}
+function okOrder(o){
+  if(!o||!RX_ID.test(o.id)||!isInt(o.code,1,999)||!isStr(o.nome,60)||!isArr(o.items,30)||!o.items.length||!o.items.every(okItem))return false;
+  if(!(o.sid===null||o.sid==='rafa'||o.sid==='davi'))return false;
+  if(!isNum(o.total,0,30000)||STS.indexOf(o.st)<0||PAYS.indexOf(o.pay)<0||!o.t||!isNum(o.t.pago,T0,T1))return false;
+  return ['prep','pronto','entregue'].every(function(k){return o.t[k]===undefined||isNum(o.t[k],T0,T1);});
+}
+function okMenu(m){return m&&RX_ID.test(m.id)&&isStr(m.n,60)&&isStr(m.d||'',80)&&CATK.indexOf(m.c)>=0&&isNum(m.p,0.01,999)&&typeof m.on==='boolean';}
+function okRec(r){return r&&isNum(r.t,T0,T1)&&isNum(r.v,0.01,1000);}
+function okDay(d){return d&&isNum(d.t,T0,T1)&&['ped','fat','pix','cli','rec','tm'].every(function(k){return isNum(d[k],0,1e7);});}
+function validState(s){
+  if(!s||s.v!==2||!isStr(s.day,40)||!isInt(s.nextCode,1,999)||!isNum(s.recHoje,0,1e6)||!isNum(s.carteiras,0,1e7))return false;
+  if(!isArr(s.orders,2000)||!s.orders.every(okOrder)||!isArr(s.menu,60)||!s.menu.length||!s.menu.every(okMenu)||!isArr(s.days,90)||!s.days.every(okDay))return false;
+  var w=s.wallet,r=s.wrafa;
+  if(!w||!isNum(w.saldo,0,1e5)||!isNum(w.limite,5,60)||!isArr(w.bloq,60)||!w.bloq.every(function(id){return RX_ID.test(id);})||!isArr(w.rec,500)||!w.rec.every(okRec))return false;
+  if(!isArr(w.tent,500)||!w.tent.every(function(x){return x&&isNum(x.t,T0,T1)&&isStr(x.motivo,200)&&isNum(x.v,0,30000);}))return false;
+  if(!(w.pedido===null||w.pedido===undefined||isNum(w.pedido,T0,T1)))return false;
+  if(!r||!isNum(r.saldo,0,1e5)||!isArr(r.rec,500)||!r.rec.every(okRec))return false;
+  return true;
+}
+function load(){try{var s=JSON.parse(localStorage.getItem(LS));if(validState(s)&&s.day===dayKey(Date.now()))return s;}catch(e){}return seed();}
 function wal(sid){return sid==='davi'?S.wallet:S.wrafa;}
 /* sessão do aluno e do gestor ficam só neste aparelho */
 var SESS='snackly-sessao',GEST='snackly-gestor';
@@ -524,7 +554,7 @@ function phoneBody(a){
   if(s==='conta')return contaScreen(a);
   var h='<h2 class="hello" style="font-size:22px">Oi, '+a.curto+'! O que vai ser hoje?</h2>';
   var act=activeOrder(ui.sid);
-  if(act){h+='<button class="note y" data-a="open-order" data-id="'+act.id+'" style="text-align:left;display:flex;justify-content:space-between;align-items:center;gap:10px"><span>Pedido <b class="mono">'+c3(act.code)+'</b> · '+stLabel(act.st)+'</span><b>Ver</b></button>';}
+  if(act){h+='<button class="note y" data-a="open-order" data-id="'+esc(act.id)+'" style="text-align:left;display:flex;justify-content:space-between;align-items:center;gap:10px"><span>Pedido <b class="mono">'+c3(act.code)+'</b> · '+stLabel(act.st)+'</span><b>Ver</b></button>';}
   h+='<div class="chips" role="group" aria-label="Categorias">'+CATS.map(function(c){return '<button class="chip" data-a="cat" data-c="'+c[0]+'" aria-pressed="'+(ui.cat===c[0])+'">'+c[1]+'</button>';}).join('')+'</div>';
   var cats=ui.cat==='tudo'?CATS.slice(1):CATS.filter(function(c){return c[0]===ui.cat;});
   cats.forEach(function(c){
@@ -541,8 +571,8 @@ function itemRow(m){
   if(!m.on)h+='<span class="lock">Esgotado</span>';
   h+='</div>';
   if(!m.on)h+='<span></span>';
-  else if(q>0)h+='<div class="qty"><button data-a="dec" data-id="'+m.id+'" aria-label="Tirar um">'+ic('minus')+'</button><span class="num">'+q+'</span><button class="y" data-a="inc" data-id="'+m.id+'" aria-label="Pôr mais um">'+ic('plus')+'</button></div>';
-  else h+='<button class="add" data-a="inc" data-id="'+m.id+'" aria-label="Pôr '+esc(m.n)+' na sacola">'+ic('plus')+'</button>';
+  else if(q>0)h+='<div class="qty"><button data-a="dec" data-id="'+esc(m.id)+'" aria-label="Tirar um">'+ic('minus')+'</button><span class="num">'+q+'</span><button class="y" data-a="inc" data-id="'+esc(m.id)+'" aria-label="Pôr mais um">'+ic('plus')+'</button></div>';
+  else h+='<button class="add" data-a="inc" data-id="'+esc(m.id)+'" aria-label="Pôr '+esc(m.n)+' na sacola">'+ic('plus')+'</button>';
   h+='</div>';
   if(ui.blocked===m.id)h+='<div class="note bad"><b>'+esc(m.n)+'</b> foi bloqueado pelo seu responsável. A tentativa aparece para ele na área dos pais.</div>';
   return h;
@@ -551,7 +581,7 @@ function cartScreen(a){
   var c=check();
   var h='<button class="back" data-a="go" data-s="menu">'+ic('back')+'Cardápio</button><h2 class="hello">Sua sacola</h2>';
   if(!c.list.length)return h+'<p class="soft">A sacola está vazia.</p>';
-  h+='<div class="items">'+c.list.map(function(x){return '<div class="item"><div class="tile">'+ic(x.m.c)+'</div><div style="min-width:0"><b>'+esc(x.m.n)+'</b><p class="pr num">'+brl(x.m.p*x.q)+'</p></div><div class="qty"><button data-a="dec" data-id="'+x.m.id+'" aria-label="Tirar um">'+ic('minus')+'</button><span class="num">'+x.q+'</span><button class="y" data-a="inc" data-id="'+x.m.id+'" aria-label="Pôr mais um">'+ic('plus')+'</button></div></div>';}).join('')+'</div>';
+  h+='<div class="items">'+c.list.map(function(x){return '<div class="item"><div class="tile">'+ic(x.m.c)+'</div><div style="min-width:0"><b>'+esc(x.m.n)+'</b><p class="pr num">'+brl(x.m.p*x.q)+'</p></div><div class="qty"><button data-a="dec" data-id="'+esc(x.m.id)+'" aria-label="Tirar um">'+ic('minus')+'</button><span class="num">'+x.q+'</span><button class="y" data-a="inc" data-id="'+esc(x.m.id)+'" aria-label="Pôr mais um">'+ic('plus')+'</button></div></div>';}).join('')+'</div>';
   h+='<div class="box"><div class="line"><span class="soft">Retirada</span><b>Balcão, quando ficar pronto</b></div><div class="line"><span>Total</span><span class="total num">'+brl(c.total)+'</span></div></div>';
   h+='<p class="cat-h">Pagamento</p>';
   if(ui.sid==='davi')h+='<div class="opt" aria-pressed="true"><i></i><span><b>Saldo Snackly</b><small>'+brl(S.wallet.saldo)+' disponível · recarregado pelo responsável</small></span></div>';
@@ -584,7 +614,7 @@ function histScreen(){
   var mine=S.orders.filter(function(o){return o.sid===ui.sid;}).slice().reverse();
   var h='<h2 class="hello">Meus pedidos</h2>';
   if(!mine.length)return h+'<p class="soft">Nenhum pedido ainda.</p>';
-  return h+'<div class="hist">'+mine.map(function(o){return '<button class="box" data-a="open-order" data-id="'+o.id+'" style="text-align:left"><div class="line"><b class="mono">#'+c3(o.code)+'</b><span class="pill'+(o.st==='pronto'?' k':o.st==='entregue'?'':' ok')+'">'+stLabel(o.st)+'</span></div><span class="soft" style="font-size:14px">'+(isToday(o.t.pago)?'Hoje':'Ontem')+', '+hm(o.t.pago)+' · '+o.items.map(function(i){return i.q+'× '+esc(i.n);}).join(', ')+'</span><b class="num">'+brl(o.total)+'</b></button>';}).join('')+'</div>';
+  return h+'<div class="hist">'+mine.map(function(o){return '<button class="box" data-a="open-order" data-id="'+esc(o.id)+'" style="text-align:left"><div class="line"><b class="mono">#'+c3(o.code)+'</b><span class="pill'+(o.st==='pronto'?' k':o.st==='entregue'?'':' ok')+'">'+stLabel(o.st)+'</span></div><span class="soft" style="font-size:14px">'+(isToday(o.t.pago)?'Hoje':'Ontem')+', '+hm(o.t.pago)+' · '+o.items.map(function(i){return i.q+'× '+esc(i.n);}).join(', ')+'</span><b class="num">'+brl(o.total)+'</b></button>';}).join('')+'</div>';
 }
 function phoneFoot(){
   var s=ui.screen,a=ALUNOS[ui.sid],h='<div class="ph-foot">';
@@ -680,7 +710,7 @@ function kitchen(){
       h+='<div class="kcard'+(fresh?' fresh':'')+'"><div class="line"><span class="kc num">'+c3(o.code)+'</span><span class="pill since'+(late?' late':'')+'" data-since="'+ref+'" data-late="'+(c[0]!=='pronto'?1:0)+'">'+sinceTxt(ref)+'</span></div>';
       h+='<p style="font-size:14px"><b>'+esc(o.nome)+'</b> <span class="soft">· '+(o.pay==='pix'?'Pix':'Saldo')+'</span></p>';
       h+='<ul>'+o.items.map(function(i){return '<li><b>'+i.q+'×</b> '+esc(i.n)+'</li>';}).join('')+'</ul>';
-      h+='<button class="btn'+(c[0]==='prep'?' y':'')+'" data-a="adv" data-id="'+o.id+'">'+c[2]+'</button></div>';
+      h+='<button class="btn'+(c[0]==='prep'?' y':'')+'" data-a="adv" data-id="'+esc(o.id)+'">'+c[2]+'</button></div>';
     });
     h+='</div>';
   });
@@ -746,8 +776,8 @@ function admin(){
   /* cardápio */
   var sold={};S.orders.filter(function(o){return isToday(o.t.pago);}).forEach(function(o){o.items.forEach(function(i){sold[i.id]=(sold[i.id]||0)+i.q;});});
   h+='<div class="panel"><div class="line" style="flex-wrap:wrap"><h3>Cardápio</h3><p class="soft" style="font-size:14px">Mudou aqui, muda na hora no app do aluno.</p></div><div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Categoria</th><th>Vendidos hoje</th><th>Preço</th><th>Disponível</th></tr></thead><tbody>'+
-    S.menu.map(function(m){return '<tr><td><b>'+esc(m.n)+'</b></td><td class="soft">'+CATS.find(function(c){return c[0]===m.c;})[1]+'</td><td class="num">'+(sold[m.id]||0)+'</td><td><input class="price" id="price-'+m.id+'" type="text" inputmode="decimal" data-price="'+m.id+'" value="'+m.p.toFixed(2).replace('.',',')+'" aria-label="Preço de '+esc(m.n)+'"></td><td><label class="sw"><input type="checkbox" id="on-'+m.id+'" data-on="'+m.id+'"'+(m.on?' checked':'')+'><span>'+(m.on?'Sim':'Esgotado')+'</span></label></td></tr>';}).join('')+
-    '</tbody></table></div><form class="add-form" id="addform"><input type="text" id="new-n" placeholder="Novo item, ex.: Pastel de queijo" aria-label="Nome do item"><select id="new-c" aria-label="Categoria">'+CATS.slice(1).map(function(c){return '<option value="'+c[0]+'">'+c[1]+'</option>';}).join('')+'</select><input type="text" id="new-p" class="price" placeholder="0,00" inputmode="decimal" aria-label="Preço"><button class="btn auto">Adicionar</button></form></div>';
+    S.menu.map(function(m){return '<tr><td><b>'+esc(m.n)+'</b></td><td class="soft">'+CATS.find(function(c){return c[0]===m.c;})[1]+'</td><td class="num">'+(sold[m.id]||0)+'</td><td><input class="price" id="price-'+esc(m.id)+'" type="text" inputmode="decimal" data-price="'+esc(m.id)+'" value="'+m.p.toFixed(2).replace('.',',')+'" aria-label="Preço de '+esc(m.n)+'"></td><td><label class="sw"><input type="checkbox" id="on-'+esc(m.id)+'" data-on="'+esc(m.id)+'"'+(m.on?' checked':'')+'><span>'+(m.on?'Sim':'Esgotado')+'</span></label></td></tr>';}).join('')+
+    '</tbody></table></div><form class="add-form" id="addform"><input type="text" id="new-n" maxlength="40" placeholder="Novo item, ex.: Pastel de queijo" aria-label="Nome do item"><select id="new-c" aria-label="Categoria">'+CATS.slice(1).map(function(c){return '<option value="'+c[0]+'">'+c[1]+'</option>';}).join('')+'</select><input type="text" id="new-p" class="price" maxlength="7" placeholder="0,00" inputmode="decimal" aria-label="Preço"><button class="btn auto">Adicionar</button></form></div>';
   h+='<p class="soft" style="font-size:13px;margin-top:14px">Cardápio, preços, histórico e indicadores são exemplos para a demonstração.</p>';
   return h;
 }
@@ -825,7 +855,7 @@ function parents(){
   h+='<div class="panel"><p class="eyebrow">Limite diário</p><p class="money" id="lim-out">'+brl(w.limite)+'</p><input type="range" id="lim" min="5" max="60" step="1" value="'+w.limite+'" aria-label="Limite diário em reais"><p class="soft" style="font-size:14px">Acima disso, o app recusa a compra.</p></div>';
   h+='</div>';
   h+='<div class="panel" style="margin-bottom:16px"><div class="line" style="flex-wrap:wrap"><h3>O que o Davi pode comprar</h3><p class="soft" style="font-size:14px">Desligado: o item aparece bloqueado no app dele.</p></div><div class="allow">';
-  CATS.slice(1).forEach(function(c){h+='<h4>'+c[1]+'</h4>';S.menu.filter(function(m){return m.c===c[0];}).forEach(function(m){var ok=w.bloq.indexOf(m.id)<0;h+='<label class="sw"><input type="checkbox" id="allow-'+m.id+'" data-allow="'+m.id+'"'+(ok?' checked':'')+'><span>'+esc(m.n)+'</span></label>';});});
+  CATS.slice(1).forEach(function(c){h+='<h4>'+c[1]+'</h4>';S.menu.filter(function(m){return m.c===c[0];}).forEach(function(m){var ok=w.bloq.indexOf(m.id)<0;h+='<label class="sw"><input type="checkbox" id="allow-'+esc(m.id)+'" data-allow="'+esc(m.id)+'"'+(ok?' checked':'')+'><span>'+esc(m.n)+'</span></label>';});});
   h+='</div></div>';
   var hist=S.orders.filter(function(o){return o.sid==='davi';}).slice().reverse();
   h+='<div class="grid2"><div class="panel"><h3>Histórico de consumo</h3><div>'+(hist.length?hist.map(function(o){return '<div class="hrow"><span class="pill">'+(isToday(o.t.pago)?'Hoje':'Ontem')+' '+hm(o.t.pago)+'</span><span>'+o.items.map(function(i){return i.q+'× '+esc(i.n);}).join(', ')+'<small>'+stLabel(o.st)+'</small></span><b class="num">'+brl(o.total)+'</b></div>';}).join(''):'<p class="soft">Sem compras.</p>')+
@@ -889,7 +919,7 @@ document.addEventListener('click',function(e){
     case 'cat':ui.cat=b.dataset.c;ui.blocked=null;render();break;
     case 'inc':
       if(ui.sid==='davi'&&S.wallet.bloq.indexOf(id)>=0){ui.blocked=id;ui.keepScroll=true;logTry(['Item bloqueado: '+menuItem(id).n],menuItem(id).p);commit();break;}
-      ui.blocked=null;ui.cart[id]=(ui.cart[id]||0)+1;ui.keepScroll=true;render();break;
+      ui.blocked=null;if(!menuItem(id))break;ui.cart[id]=Math.min(20,(ui.cart[id]||0)+1);ui.keepScroll=true;render();break;
     case 'dec':ui.cart[id]=Math.max(0,(ui.cart[id]||0)-1);if(!ui.cart[id])delete ui.cart[id];ui.keepScroll=true;if(ui.screen==='cart'&&!cartCount())ui.screen='menu';render();break;
     case 'go':ui.screen=b.dataset.s;ui.blocked=null;if(ui.screen==='topup-pix')ui.pixAt=Date.now();render();break;
     case 'open-order':ui.orderId=id;ui.screen='order';render();break;
@@ -907,7 +937,7 @@ document.addEventListener('click',function(e){
       break;
   }
 });
-function parsePrice(v){var n=parseFloat(String(v).replace(/[^\d,.-]/g,'').replace(',','.'));return isFinite(n)&&n>0?r2(n):null;}
+function parsePrice(v){var n=parseFloat(String(v).slice(0,12).replace(/[^\d,.-]/g,'').replace(',','.'));return isFinite(n)&&n>0&&n<=999?r2(n):null;}
 document.addEventListener('change',function(e){
   var t=e.target;
   if(t.dataset.price){var m=menuItem(t.dataset.price),n=parsePrice(t.value);if(n===null){toast('Preço inválido. Use um valor como 7,50.');t.value=m.p.toFixed(2).replace('.',',');return;}m.p=n;commit();toast(m.n+' agora custa '+brl(n)+'.');}
