@@ -215,6 +215,15 @@ input[type=range]{width:100%;accent-color:var(--ink)}
 @media (max-width:760px){.kb{grid-template-columns:minmax(0,1fr)}.kcol{min-height:0}.brand span{display:none}.reset{display:none}}
 @media (max-width:520px){.phone.fit{width:100%;height:calc(100vh - 110px);padding:0;background:transparent;border-radius:0}.phone.fit .ph{border-radius:24px;border:2px solid var(--line)}.phone.fit .ph-status{display:none}.kpis{grid-template-columns:minmax(0,1fr)}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* celular de verdade: o app do aluno ocupa a tela inteira, sem moldura nem abas da demo */
+body.solo::before,body.solo .top{display:none}
+body.solo .wrap{padding:0;max-width:none}
+body.solo .phone,body.solo .phone.fit{width:100%;height:100vh;height:100dvh;padding:0;border-radius:0;background:var(--bg)}
+body.solo .phone .ph,body.solo .phone.fit .ph{border-radius:0;border:0}
+body.solo .ph-status{display:none}
+body.solo .ph-head{padding-top:calc(12px + env(safe-area-inset-top,0px));padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px))}
+body.solo .ph-foot{padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+body.solo .banner{top:calc(10px + env(safe-area-inset-top,0px))}
 </style>
 
 <header class="top">
@@ -387,7 +396,15 @@ function createOrder(pay){
   S.nextCode=S.nextCode>=999?1:S.nextCode+1;
   S.orders.push(o);if(pay==='saldo')S.wallet.saldo=r2(S.wallet.saldo-c.total);
   ui.cart={};ui.screen='order';ui.orderId=o.id;commit();
+  /* no celular sozinho não tem ninguém na cozinha: ela anda sozinha para o aluno ver o pedido ficar pronto */
+  if(isSolo()){autoStep(o.id,'novo',4000);autoStep(o.id,'prep',12000);}
 }
+function autoStep(id,from,ms){setTimeout(function(){var o=S.orders.find(function(x){return x.id===id;});if(o&&o.st===from)advance(id);},ms);}
+
+/* celular de verdade (tela estreita) abrindo o app: só o app do aluno, em tela cheia */
+var SOLO=window.matchMedia('(max-width:600px)');
+function isSolo(){return SOLO.matches&&(ui.tab==='ao-vivo'||ui.tab==='aluno');}
+if(SOLO.addEventListener)SOLO.addEventListener('change',function(){render();});else if(SOLO.addListener)SOLO.addListener(function(){render();});
 
 /* ---------- celular do aluno ---------- */
 function phone(fit){
@@ -570,15 +587,17 @@ function parents(){
 
 /* ---------- desenho ---------- */
 function render(){
+  var solo=isSolo(),tab=solo?'aluno':ui.tab;
+  document.body.classList.toggle('solo',solo);
   document.querySelectorAll('.tab').forEach(function(b){b.setAttribute('aria-selected',b.dataset.tab===ui.tab);});
-  document.querySelectorAll('.view').forEach(function(v){v.hidden=v.id!=='v-'+ui.tab;});
+  document.querySelectorAll('.view').forEach(function(v){v.hidden=v.id!=='v-'+tab;});
   var pb=document.getElementById('phbody'),st=pb?pb.scrollTop:0,ks=window.scrollY;
   ['h-phone-a','h-phone-b','h-kit-a','h-kit-b'].forEach(function(id){document.getElementById(id).innerHTML='';});
-  if(ui.tab==='ao-vivo'){document.getElementById('h-phone-a').innerHTML=phone(false);document.getElementById('h-kit-a').innerHTML=kitchen();}
-  if(ui.tab==='aluno')document.getElementById('h-phone-b').innerHTML=phone(true);
-  if(ui.tab==='cozinha')document.getElementById('h-kit-b').innerHTML=kitchen();
-  document.getElementById('v-admin').innerHTML=ui.tab==='admin'?admin():'';
-  document.getElementById('v-pais').innerHTML=ui.tab==='pais'?parents():'';
+  if(tab==='ao-vivo'){document.getElementById('h-phone-a').innerHTML=phone(false);document.getElementById('h-kit-a').innerHTML=kitchen();}
+  if(tab==='aluno')document.getElementById('h-phone-b').innerHTML=phone(true);
+  if(tab==='cozinha')document.getElementById('h-kit-b').innerHTML=kitchen();
+  document.getElementById('v-admin').innerHTML=tab==='admin'?admin():'';
+  document.getElementById('v-pais').innerHTML=tab==='pais'?parents():'';
   var nb=document.getElementById('phbody');if(nb&&ui.keepScroll)nb.scrollTop=st;ui.keepScroll=false;
   drawQR();modal();tick();
 }
